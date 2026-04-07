@@ -3,7 +3,9 @@ pipeline {
 
     environment {
         IMAGE_NAME = "my-jenkins-app"
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
+        DEPLOYMENT_NAME = "my-jenkins-app"
+        CONTAINER_NAME  = "my-jenkins-app"
     }
 
     stages {
@@ -14,27 +16,47 @@ pipeline {
             }
         }
 
-        stage('Check Docker') {
+        stage('Check Tools') {
             steps {
                 sh 'docker --version'
                 sh 'kubectl version --client'
+                sh 'minikube version'
             }
         }
 
         stage('Build Image') {
             steps {
                 sh '''
-                eval $(minikube -p minikube docker-env)
                 docker build -t $IMAGE_NAME:$IMAGE_TAG .
                 docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
                 '''
             }
         }
 
+        stage('Load Image to Minikube') {
+            steps {
+                sh '''
+                minikube status
+                minikube image load $IMAGE_NAME:$IMAGE_TAG
+                '''
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'kubectl apply -f deployment.yaml'
-                sh 'kubectl apply -f service.yaml'
+                sh '''
+                kubectl apply -f deployment.yaml
+                kubectl apply -f service.yaml
+                kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$IMAGE_NAME:$IMAGE_TAG
+                kubectl rollout status deployment/$DEPLOYMENT_NAME
+                '''
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh 'kubectl get pods'
+                sh 'kubectl get svc'
             }
         }
     }
