@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "my-jenkins-app"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
     stages {
         stage('Clone Check') {
             steps {
@@ -12,21 +17,24 @@ pipeline {
         stage('Check Docker') {
             steps {
                 sh 'docker --version'
+                sh 'kubectl version --client'
             }
         }
 
         stage('Build Image') {
             steps {
-                sh 'docker build -t my-jenkins-app .'
+                sh '''
+                eval $(minikube -p minikube docker-env)
+                docker build -t $IMAGE_NAME:$IMAGE_TAG .
+                docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+                '''
             }
         }
 
-        stage('Run Container') {
+        stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-                docker rm -f my-jenkins-container || true
-                docker run -d --name my-jenkins-container -p 3000:3000 my-jenkins-app
-                '''
+                sh 'kubectl apply -f deployment.yaml'
+                sh 'kubectl apply -f service.yaml'
             }
         }
     }
